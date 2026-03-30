@@ -9,7 +9,6 @@ app = FastAPI()
 
 class ChatPayload(BaseModel):
     prompt: str
-    # Accept a string from Apple Shortcuts, default to empty
     history: Union[str, List[Any]] = ""
 
 @app.post("/api/chat")
@@ -19,14 +18,13 @@ async def chat_endpoint(payload: ChatPayload):
     if prompt_text in ["new chat", "clear history", "start over"]:
         return {"speech": "Starting a new conversation.", "new_history": []}
         
-    # Safely parse the history string coming from Shortcuts
     messages = []
     if isinstance(payload.history, str):
         if payload.history.strip():
             try:
                 messages = json.loads(payload.history)
             except json.JSONDecodeError:
-                pass # If the file exists but is empty/corrupt, start fresh
+                pass 
     elif isinstance(payload.history, list):
         messages = payload.history
 
@@ -38,7 +36,27 @@ async def chat_endpoint(payload: ChatPayload):
         
     messages.append({"role": "user", "content": payload.prompt})
 
+    # --- NEW VALIDATION LAYER ---
     api_key = os.environ.get("GROQ_API_KEY")
+    
+    # 1. Check if the variable is completely missing or None
+    if not api_key:
+        return {
+            "speech": "Server Error: The Groq API key is missing from the Vercel environment variables.", 
+            "new_history": payload.history
+        }
+        
+    # Strip any accidental whitespace from copy-pasting
+    api_key = api_key.strip() 
+    
+    # 2. Check if it looks like a valid Groq key (starts with gsk_)
+    if not api_key.startswith("gsk_"):
+        return {
+            "speech": "Server Error: The Groq API key is malformed. It does not start with g-s-k.", 
+            "new_history": payload.history
+        }
+    # ----------------------------
+
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -61,5 +79,4 @@ async def chat_endpoint(payload: ChatPayload):
         return {"speech": bot_reply, "new_history": messages}
         
     except Exception as e:
-        # This will send the exact Python/HTTP error straight to your Mac screen
         return {"speech": f"Groq API Error: {str(e)}", "new_history": payload.history}
