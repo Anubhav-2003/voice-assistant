@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import Union, List, Any
 import os
 import json
 import urllib.request
@@ -8,17 +9,27 @@ app = FastAPI()
 
 class ChatPayload(BaseModel):
     prompt: str
-    history: list
+    # Accept a string from Apple Shortcuts, default to empty
+    history: Union[str, List[Any]] = ""
 
 @app.post("/api/chat")
 async def chat_endpoint(payload: ChatPayload):
     prompt_text = payload.prompt.lower().strip()
     
-    # Handle voice commands programmatically
     if prompt_text in ["new chat", "clear history", "start over"]:
         return {"speech": "Starting a new conversation.", "new_history": []}
         
-    messages = payload.history
+    # Safely parse the history string coming from Shortcuts
+    messages = []
+    if isinstance(payload.history, str):
+        if payload.history.strip():
+            try:
+                messages = json.loads(payload.history)
+            except json.JSONDecodeError:
+                pass # If the file exists but is empty/corrupt, start fresh
+    elif isinstance(payload.history, list):
+        messages = payload.history
+
     if not messages:
         messages.append({
             "role": "system", 
@@ -50,4 +61,4 @@ async def chat_endpoint(payload: ChatPayload):
         return {"speech": bot_reply, "new_history": messages}
         
     except Exception as e:
-        return {"speech": "Connection error.", "new_history": payload.history}
+        return {"speech": "Connection error.", "new_history": []}
