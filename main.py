@@ -61,4 +61,5 @@ async def chat_endpoint(payload: ChatPayload):
         return {"speech": bot_reply, "new_history": messages}
         
     except Exception as e:
-        return {"speech": "Connection error.", "new_history": []}
+        # This will send the exact Python/HTTP error straight to your Mac screen
+        return {"speech": f"Groq API Error: {str(e)}", "new_history": payload.history}
